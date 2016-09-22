@@ -3,13 +3,16 @@
   <label id = "fps">fps</label>
   <body>
     <canvas width = "1370" height = "970" id = "my_Canvas"></canvas>
+    <script src="gl-matrix.js"></script>
     <script>
-      var instanceNum = 15;  //The nubmer of fans to draw
+      var instanceNum = 7;  //The nubmer of fans to draw. 
+      var instancePiece = 30; //The number of pieces in each fan. The range is 3 ~ 5361, because only 65536 vertices can be draw within one call. 
       var vertCode =
         '#version 300 es\n' + 
         'precision highp float;\n' +
         'precision highp int;\n' +
         'uniform mat4 moveMatrix;\n' +
+        'uniform mat4 originMatrix;\n' +
         'uniform vec3 center;\n' +
         'layout(location = 0) in vec3 pos;\n' +
         'in vec3 pColor;\n' +
@@ -17,7 +20,7 @@
         'void main()\n' +
         '{\n' +
             'fragColor = pColor;\n' +
-            'gl_Position = moveMatrix * vec4(pos + center, 1.0);\n' +
+            'gl_Position = originMatrix * moveMatrix * vec4(pos, 1.0) + vec4(center, 0.0);\n' +
         '}\n';
       // Fragment shader program
       var fragCode =
@@ -58,8 +61,8 @@
       gl.useProgram(shaderProgram);
 
         // -- Init Buffer
-      var scale = 1.0 / Math.sqrt(instanceNum);
-      var vertices = new Float32Array([
+      var scale = 0.5 / Math.sqrt(instanceNum);
+      /*var vertices = new Float32Array([
         0.0,  0.0,  0.15 * scale, 0.1, 0.1, 0.1,
         0.0,  0.0, -0.15 * scale, 0.1, 0.1, 0.1,
         scale * Math.cos(30.0 * (Math.PI / 180.0) ),  scale * Math.sin(30.0 * (Math.PI / 180.0)),  scale * 0.15, 1.0, 0.0, 0.0,
@@ -86,75 +89,125 @@
         scale * Math.cos(330.0 * (Math.PI / 180.0)),  scale * Math.sin(330.0 * (Math.PI / 180.0)),  scale * -0.15, 0.0, 1.0, 1.0,
         scale * Math.cos(360.0 * (Math.PI / 180.0)),  scale * Math.sin(360.0 * (Math.PI / 180.0)),  scale * 0.15, 1.0, 0.0, 1.0,
         scale * Math.cos(360.0 * (Math.PI / 180.0)),  scale * Math.sin(360.0 * (Math.PI / 180.0)),  scale * -0.15, 1.0, 0.0, 1.0,
-      ]);
-
-      function rotateZ(m, angle) {
-        var c = Math.cos(angle);
-        var s = Math.sin(angle);
-        var mv0 = m[0], mv4 = m[4], mv8 = m[8];
-                
-        m[0] = c*m[0]-s*m[1];
-        m[4] = c*m[4]-s*m[5];
-        m[8] = c*m[8]-s*m[9];
-
-        m[1]=c*m[1]+s*mv0;
-        m[5]=c*m[5]+s*mv4;
-        m[9]=c*m[9]+s*mv8;
+      ]);*/
+      var vertices = [
+        0.0,  0.0,  0.15 * scale, 0.1, 0.1, 0.1,
+        0.0,  0.0, -0.15 * scale, 0.1, 0.1, 0.1,
+      ];
+      for(var ii = 0; ii < instancePiece; ++ii){
+        vertices.push(scale * 0.2 * Math.cos((360.0/instancePiece * ii + 0) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.2 * Math.sin((360.0/instancePiece * ii + 0) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.2 * Math.cos((360.0/instancePiece * ii + 0) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.2 * Math.sin((360.0/instancePiece * ii + 0) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.4 * Math.cos((360.0/instancePiece * ii + 8) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.4 * Math.sin((360.0/instancePiece * ii + 8) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.4 * Math.cos((360.0/instancePiece * ii + 8) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.4 * Math.sin((360.0/instancePiece * ii + 8) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.6 * Math.cos((360.0/instancePiece * ii + 16) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.6 * Math.sin((360.0/instancePiece * ii + 16) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.6 * Math.cos((360.0/instancePiece * ii + 16) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.6 * Math.sin((360.0/instancePiece * ii + 16) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.8 * Math.cos((360.0/instancePiece * ii + 24) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.8 * Math.sin((360.0/instancePiece * ii + 24) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 0.8 * Math.cos((360.0/instancePiece * ii + 24) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.8 * Math.sin((360.0/instancePiece * ii + 24) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 1.0 * Math.cos((360.0/instancePiece * ii + 32) * (Math.PI / 180.0)));
+        vertices.push(scale * 1.0 * Math.sin((360.0/instancePiece * ii + 32) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 1.0 * Math.cos((360.0/instancePiece * ii + 32) * (Math.PI / 180.0)));
+        vertices.push(scale * 1.0 * Math.sin((360.0/instancePiece * ii + 32) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 1.2 * Math.cos((360.0/instancePiece * ii + 40) * (Math.PI / 180.0)));
+        vertices.push(scale * 1.2 * Math.sin((360.0/instancePiece * ii + 40) * (Math.PI / 180.0)));
+        vertices.push(scale * 0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(scale * 1.2 * Math.cos((360.0/instancePiece * ii + 40) * (Math.PI / 180.0)));
+        vertices.push(scale * 1.2 * Math.sin((360.0/instancePiece * ii + 40) * (Math.PI / 180.0)));
+        vertices.push(scale * -0.15);
+        vertices.push(Math.random());
+        vertices.push(Math.random());
+        vertices.push(Math.random());
       }
-
-      function rotateX(m, angle) {
-        var c = Math.cos(angle);
-        var s = Math.sin(angle);
-        var mv1 = m[1], mv5 = m[5], mv9 = m[9];
-                
-        m[1] = m[1]*c-m[2]*s;
-        m[5] = m[5]*c-m[6]*s;
-        m[9] = m[9]*c-m[10]*s;
-
-        m[2] = m[2]*c+mv1*s;
-        m[6] = m[6]*c+mv5*s;
-        m[10] = m[10]*c+mv9*s;
-      }
-
-      function rotateY(m, angle) {
-        var c = Math.cos(angle);
-        var s = Math.sin(angle);
-        var mv0 = m[0], mv4 = m[4], mv8 = m[8];
-                
-        m[0] = c*m[0]+s*m[2];
-        m[4] = c*m[4]+s*m[6];
-        m[8] = c*m[8]+s*m[10];
-
-        m[2] = c*m[2]-s*mv0;
-        m[6] = c*m[6]-s*mv4;
-        m[10] = c*m[10]-s*mv8;
-      }
-
       var vertexPosBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
         
       var MAX_UNSIGNED_SHORT = 65535;
-      var indices = new Uint16Array([
+      var indices = [];
+      /*var indices = new Uint16Array([
         0, 1, 2, 3,  MAX_UNSIGNED_SHORT, 0, 1, 4, 5, MAX_UNSIGNED_SHORT, 0, 1, 6, 7, MAX_UNSIGNED_SHORT, 0, 1, 8, 9, MAX_UNSIGNED_SHORT, 0, 1, 10, 11, MAX_UNSIGNED_SHORT, 0, 1, 12, 13,
         0, 1, 14, 15,  MAX_UNSIGNED_SHORT, 0, 1, 16, 17, MAX_UNSIGNED_SHORT, 0, 1, 18, 19, MAX_UNSIGNED_SHORT, 0, 1, 20, 21, MAX_UNSIGNED_SHORT, 0, 1, 22, 23, MAX_UNSIGNED_SHORT, 0, 1, 24, 25,
-      ]);
+      ]);*/
+      for(var ii = 0; ii < instancePiece ; ++ii){
+        indices.push(0);
+        indices.push(1);
+        indices.push(ii * 12 + 2);
+        indices.push(ii * 12 + 3);
+        indices.push(ii * 12 + 4);
+        indices.push(ii * 12 + 5);
+        indices.push(ii * 12 + 6);
+        indices.push(ii * 12 + 7);
+        indices.push(ii * 12 + 8);
+        indices.push(ii * 12 + 9);
+        indices.push(ii * 12 + 10);
+        indices.push(ii * 12 + 11);
+        indices.push(ii * 12 + 12);
+        indices.push(ii * 12 + 13);
+        indices.push(MAX_UNSIGNED_SHORT);
+      }
       var vertexElementBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexElementBuffer);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
       // -- Init Vertex Array
       var vertexArray = gl.createVertexArray();
       gl.bindVertexArray(vertexArray);
-      var moveMatrix =[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-      rotateZ(moveMatrix, 0.4);
-      rotateY(moveMatrix, 0.4);
-      rotateX(moveMatrix, 0.4);
 
-      var instanceCenter = [0.3, 0.2, 0.4];
+
       var moveMat = gl.getUniformLocation(shaderProgram, "moveMatrix");
+      var originMat = gl.getUniformLocation(shaderProgram, "originMatrix");
       var center = gl.getUniformLocation(shaderProgram, "center");
       var vertexPosLocation = 0;
 
@@ -174,19 +227,30 @@
       gl.clearColor(1.0, 1.0, 1.0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       var instanceCenter = [];
+      var instanceMat = [];
+      var instanceOriMat = [];
+      var instanceAxis = [];
       for(var ii = 0; ii<instanceNum; ++ii){
-        instanceCenter. push(Math.random() * 1.8 - 1);
-        instanceCenter. push(Math.random() * 1.8 - 1);
-        instanceCenter. push(Math.random() * 1.8 - 1);
+        instanceCenter.push(Math.random() * 1 - 0.5);
+        instanceCenter.push(Math.random() * 1 - 0.5);
+        instanceCenter.push(Math.random() * 1 - 0.5);
+        var mvMat = mat4.create();
+        var rotMat = mat4.create();
+        mat4.identity(mvMat);
+        mat4.identity(rotMat);
+        mat4.rotate(mvMat, mvMat, Math.PI / instanceNum * ii + 0.7, [1.0, 0.0, 0.0]);
+        mat4.rotate(mvMat, mvMat, Math.PI / instanceNum * ii * 1.7 + 0.07, [0.0, 1.0, 0.0]);
+        instanceMat.push(rotMat);
+        instanceOriMat.push(mvMat);
       }
 
       var draw = function(){
         gl.clear(gl.COLOR_BUFFER_BIT);
-        rotateZ(moveMatrix, 0.01);
-        rotateY(moveMatrix, 0.01);
-        rotateX(moveMatrix, 0.01);
+        
         for(var ii = 0; ii<instanceNum; ++ii){
-          gl.uniformMatrix4fv(moveMat, false, moveMatrix);
+          mat4.rotate(instanceMat[ii], instanceMat[ii], 0.01, [0.0, 0.0, 1.0]);
+          gl.uniformMatrix4fv(moveMat, false, instanceMat[ii]);
+          gl.uniformMatrix4fv(originMat, false, instanceOriMat[ii]);
           gl.uniform3f(center, instanceCenter[0 + ii * 3], instanceCenter[1 + ii * 3], instanceCenter[2 + ii * 3]);
           gl.bindVertexArray(vertexArray);
           gl.drawElements(gl.TRIANGLE_STRIP, indices.length , gl.UNSIGNED_SHORT, 0);
