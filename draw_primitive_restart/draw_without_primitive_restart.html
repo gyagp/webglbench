@@ -172,8 +172,6 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        
-      var MAX_UNSIGNED_SHORT = 65535;
       var indices = [];
       /*var indices = new Uint16Array([
         0, 1, 2, 3,  MAX_UNSIGNED_SHORT, 0, 1, 4, 5, MAX_UNSIGNED_SHORT, 0, 1, 6, 7, MAX_UNSIGNED_SHORT, 0, 1, 8, 9, MAX_UNSIGNED_SHORT, 0, 1, 10, 11, MAX_UNSIGNED_SHORT, 0, 1, 12, 13,
@@ -194,7 +192,6 @@
         indices.push(ii * 12 + 11);
         indices.push(ii * 12 + 12);
         indices.push(ii * 12 + 13);
-        indices.push(MAX_UNSIGNED_SHORT);
       }
       var vertexElementBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexElementBuffer);
@@ -253,7 +250,9 @@
           gl.uniformMatrix4fv(originMat, false, instanceOriMat[ii]);
           gl.uniform3f(center, instanceCenter[0 + ii * 3], instanceCenter[1 + ii * 3], instanceCenter[2 + ii * 3]);
           gl.bindVertexArray(vertexArray);
-          gl.drawElements(gl.TRIANGLE_STRIP, indices.length , gl.UNSIGNED_SHORT, 0);
+          for(var jj = 0; jj < instancePiece ; ++jj){
+            gl.drawElements(gl.TRIANGLE_STRIP, 14 , gl.UNSIGNED_SHORT, 14 * jj * 2);
+          }
         }
 
       }

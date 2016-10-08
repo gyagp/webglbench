@@ -1,0 +1,459 @@
+
+<html><head>
+<title>MBR model</title>
+
+<script id="shader-vs" type="x-shader/x-vertex">#version 300 es
+  in vec3 aPos;
+  in vec2 aTexCoord;
+  out vec2 vTC;
+void main(void) {
+   gl_Position = vec4(aPos, 1.);
+   vTC = aTexCoord;
+}
+</script> 
+
+<script id="shader-fs-show" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+  uniform sampler2D sampA;
+  uniform sampler2D sampB;
+  in vec2 vTC;
+  out vec4 FragColor;
+void main(void) {
+   FragColor = vec4(.01*(texture(sampA, vTC).r + 60.),
+     1.5*texture(sampB, vTC).r, 0., 1.);
+}
+</script> 
+
+<script id="shader-fs" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+  uniform sampler2D sampA;
+  uniform sampler2D sampB;
+  uniform sampler2D tab_xm;
+  uniform sampler2D tab_hj;
+  uniform sampler2D tab_df;
+  uniform sampler2D tab_kx;
+  uniform float mdt;
+  uniform float dt;
+  uniform float dth2;
+  in vec2 vTC;
+  layout(location = 0) out vec4 FragData0;
+  layout(location = 1) out vec4 FragData1;
+  const float dx = 1./512., st = 1./128., st2 = st/2.;
+void main(void) {
+   vec4 t = texture(sampA, vTC);
+   float Vm = t.r,  Ca = t.g,  d = t.b,  f = t.a;
+   t   = texture(sampB, vTC);
+   float x = t.r,  m = t.g,  h = t.b,  j = t.a;
+
+   float di = 90. + Vm,  i = floor(di);
+   di -= i;
+   i = (i + .5)*st;
+   float i1 = i + st;
+   vec4 xm  = texture(tab_xm, vec2(i, .5));
+   vec4 xm1 = texture(tab_xm, vec2(i1, .5));
+   x += (xm.r + (xm1.r - xm.r)*di - x*(xm.g + (xm1.g - xm.g)*di))*dt;
+   m += (xm.b + (xm1.b - xm.b)*di - m*(xm.a + (xm1.a - xm.a)*di))*dt;
+   vec4 hj  = texture(tab_hj, vec2(i, .5));
+   vec4 hj1 = texture(tab_hj, vec2(i1, .5));
+   h += (hj.r + (hj1.r - hj.r)*di - h*(hj.g + (hj1.g - hj.g)*di))*dt;
+   j += (hj.b + (hj1.b - hj.b)*di - j*(hj.a + (hj1.a - hj.a)*di))*dt;
+   FragData1 = vec4(x, m, h, j );
+
+   vec4 kx  = texture(tab_kx, vec2(i, .5));
+   vec4 kx1 = texture(tab_kx, vec2(i1, .5));
+   float Jsum = kx.r + (kx1.r - kx.r)*di; // iK
+   Jsum += x*(kx.g + (kx1.g - kx.g)*di); // ix
+   Jsum += (4.*m*m*m*h*j + .003)*(Vm - 50.); // iNa
+   float is = .09*d*f*(Vm - (-82.3 - 13.0287*log(Ca)));
+   Jsum += is;
+   Ca += (-.0000001*is + .07*(.0000001 - Ca))*dt;
+   Vm += ( 
+     (texture(sampA, vec2(vTC.x, vTC.y + dx) ).r +
+      texture(sampA, vec2(vTC.x, vTC.y - dx) ).r +
+      texture(sampA, vec2(vTC.x + dx, vTC.y) ).r +
+      texture(sampA, vec2(vTC.x - dx, vTC.y) ).r )*2. +
+
+      texture(sampA, vec2(vTC.x + dx, vTC.y + dx) ).r +
+      texture(sampA, vec2(vTC.x - dx, vTC.y - dx) ).r +
+      texture(sampA, vec2(vTC.x + dx, vTC.y - dx) ).r +
+      texture(sampA, vec2(vTC.x - dx, vTC.y + dx) ).r -
+      12.*Vm)*dth2;
+   Vm -= Jsum*dt;
+   vec4 df  = texture(tab_df, vec2(i, .5));
+   vec4 df1 = texture(tab_df, vec2(i1, .5));
+// MBR speedup calcium by 2. f and d gates are being speed up by two
+   d += (df.r + (df1.r - df.r)*di - d*(df.g + (df1.g - df.g)*di))*mdt;
+   f += (df.b + (df1.b - df.b)*di - f*(df.a + (df1.a - df.a)*di))*mdt;
+   FragData0 = vec4(Vm, Ca, d, f);
+}
+</script> 
+
+<script type="text/javascript">
+function getShader ( gl, id ){
+   var shaderScript = document.getElementById ( id );
+   var str = "";
+   var k = shaderScript.firstChild;
+   while ( k ){
+     if ( k.nodeType == 3 ) str += k.textContent;
+     k = k.nextSibling;
+   }
+   var shader;
+   if ( shaderScript.type == "x-shader/x-fragment" )
+           shader = gl.createShader ( gl.FRAGMENT_SHADER );
+   else if ( shaderScript.type == "x-shader/x-vertex" )
+           shader = gl.createShader(gl.VERTEX_SHADER);
+   else return null;
+   gl.shaderSource(shader, str);
+   gl.compileShader(shader);
+   if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) == 0)
+      alert(id + "\n" + gl.getShaderInfoLog(shader));
+   return shader;
+}
+
+var gl, canvas, prog, prog_show, FBO, FBO1,
+    textureA0, textureA1, textureB0, textureB1, locA, locB, pixA=[], pixB=[],
+    delay = 10, it = 10, frames = 0, time, animation = "animate",
+    n = 512, dt = .02, h = .03, D = 0.001, mod = 2;
+function main() {
+   var c = document.getElementById("c");
+   var err = "Your browser does not support ";
+   if (!window.WebGLRenderingContext){
+     alert(err+"WebGL. See http://get.webgl.org");
+     return;}
+   try { gl = c.getContext("webgl2");
+   } catch(e) {}
+   if ( !gl ) {alert("Can't get WebGL2"); return;}
+
+   var ext;
+   try { ext = gl.getExtension("EXT_color_buffer_float");
+   } catch(e) {}
+   if ( !ext ) {alert(err + "EXT_color_buffer_float extension"); return;}
+
+   prog  = gl.createProgram();
+   gl.attachShader(prog, getShader( gl, "shader-vs" ));
+   gl.attachShader(prog, getShader( gl, "shader-fs" ));
+   gl.linkProgram(prog);
+   gl.useProgram(prog);
+   gl.uniform1f(gl.getUniformLocation(prog, "dt"), dt);
+   gl.uniform1f(gl.getUniformLocation(prog, "mdt"), mod*dt);
+   gl.uniform1f(gl.getUniformLocation(prog, "dth2"), D*dt/(4*h*h));
+   gl.uniform1i(gl.getUniformLocation(prog, "tab_xm"), 4);
+   gl.uniform1i(gl.getUniformLocation(prog, "tab_hj"), 5);
+   gl.uniform1i(gl.getUniformLocation(prog, "tab_df"), 6);
+   gl.uniform1i(gl.getUniformLocation(prog, "tab_kx"), 7);
+   locA = gl.getUniformLocation(prog, "sampA");
+   locB = gl.getUniformLocation(prog, "sampB");
+
+   var posBuffer = gl.createBuffer();
+   gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+   var vertices = new Float32Array([-1,-1,0, 1,-1,0, -1,1,0, 1,1,0]);
+   var aPosLoc = gl.getAttribLocation(prog, "aPos");
+   gl.enableVertexAttribArray( aPosLoc );
+   var aTexLoc = gl.getAttribLocation(prog, "aTexCoord");
+   gl.enableVertexAttribArray( aTexLoc );
+   var texCoords = new Float32Array([0,0, 1,0, 0,1, 1,1]);
+   var texCoordOffset = vertices.byteLength;
+   gl.bufferData(gl.ARRAY_BUFFER,
+       texCoordOffset + texCoords.byteLength, gl.STATIC_DRAW);
+   gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+   gl.bufferSubData(gl.ARRAY_BUFFER, texCoordOffset, texCoords);
+   gl.vertexAttribPointer(aPosLoc, 3, gl.FLOAT, gl.FALSE, 0, 0);
+   gl.vertexAttribPointer(aTexLoc, 2, gl.FLOAT, gl.FALSE, 0, texCoordOffset);
+
+   for(var i = 0; i<n; i++)
+    for(var j = 0; j<n; j++){
+      var t = (i - n/2)*.05;
+      var ty = .5/(Math.exp(-.2*(j - n/3)) + 1);
+      t = ty*50*Math.exp(-t*t);
+      pixA.push( -85 + t,  .0000001);
+      t = (i - n/2 + 30)*.04;
+      t = ty*Math.exp(-t*t);
+      pixA.push( t, 1-t );
+      pixB.push( .2*t, t, 1-t, 1-t);
+    }
+   gl.activeTexture(gl.TEXTURE0);
+   textureA0 = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, textureA0);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, n,n)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+     new Float32Array(pixA))
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+   gl.activeTexture(gl.TEXTURE1);
+   textureB0 = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, textureB0);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, n,n)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+     new Float32Array(pixB))
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+   gl.activeTexture(gl.TEXTURE2);
+   textureA1 = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, textureA1);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, n,n)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+     new Float32Array(pixB))
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+   gl.activeTexture(gl.TEXTURE3);
+   textureB1 = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, textureB1);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, n,n)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+     new Float32Array(pixA))
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+   var tab = new Float32Array(128*4),  t, p = 0;
+   for (var i = 0; i < 128; i++) {  // x,m
+    Vm = -90 + i;
+    tab[p++] = t = .0005*Math.exp(.083*(Vm + 50)) / (Math.exp(.057*(Vm + 50)) + 1);
+    tab[p++] = t + .0013*Math.exp(-.06*(Vm + 20)) / (Math.exp(-.04*(Vm + 20)) + 1);
+    tab[p++] = t = -(Vm + 47.01) / (Math.exp(-.1*(Vm + 47.01)) - 1);
+    tab[p++] = t + 40*Math.exp(-.056*(Vm + 72));
+   }
+   gl.activeTexture(gl.TEXTURE4);
+   var tab_xm = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, tab_xm);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 128,1)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, 128,1, gl.RGBA, gl.FLOAT, tab)
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+   p = 0;
+   for (var i = 0; i < 128; i++) {  // h,j
+    Vm = -90 + i;
+    tab[p++] = t = .126*Math.exp(-.25*(Vm + 77));
+    tab[p++] = t + 1.7 / (Math.exp(-.082*(Vm + 22.5)) + 1);
+    tab[p++] = t = .055*Math.exp(-.25*(Vm + 78)) / (Math.exp(-.2*(Vm + 78)) + 1);
+    tab[p++] = t + .3 / (Math.exp(-.1*(Vm + 32)) + 1);
+   }
+   gl.activeTexture(gl.TEXTURE5);
+   var tab_hj = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, tab_hj);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 128,1)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, 128,1, gl.RGBA, gl.FLOAT, tab)
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+   p = 0;
+   for (var i = 0; i < 128; i++) {  // d,f
+    Vm = -90 + i;
+    tab[p++] = t = .095*Math.exp(-.01*(Vm - 5)) / (Math.exp(-.072*(Vm - 5)) + 1);
+    tab[p++] = t + .07*Math.exp(-.017*(Vm + 44)) / (Math.exp(.05*(Vm + 44)) + 1);
+    tab[p++] = t = .012*Math.exp(-.008*(Vm + 28)) / (Math.exp(.15*(Vm + 28)) + 1);
+    tab[p++] = t + .0065*Math.exp(-.02*(Vm + 30)) / (Math.exp(-.2*(Vm + 30)) + 1);
+   }
+   gl.activeTexture(gl.TEXTURE6);
+   var tab_df = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, tab_df);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 128,1)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, 128,1, gl.RGBA, gl.FLOAT, tab)
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+   p = 0;
+   for (var i = 0; i < 128; i++) {  // iK,ix
+    Vm = -90 + i;
+    tab[p++] = .35*(4*(Math.exp(.04*(Vm + 85)) - 1) / (Math.exp(.08*(Vm + 53)) +
+     Math.exp(0.04*(Vm + 53))) + .2*(Vm + 23.01) / (1 - Math.exp(-.04*(Vm + 23.01))));
+    tab[p++] = .8*(Math.exp(.04*(Vm + 77)) - 1) / Math.exp(.04*(Vm + 35));
+    tab[p++] =0;  tab[p++] = 0;
+   }
+   gl.activeTexture(gl.TEXTURE7);
+   var tab_kx = gl.createTexture();
+   gl.bindTexture(gl.TEXTURE_2D, tab_kx);
+   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 128,1)
+   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, 128,1, gl.RGBA, gl.FLOAT, tab)
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+   FBO = gl.createFramebuffer();
+   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+       gl.TEXTURE_2D, textureA0, 0);
+   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
+       gl.TEXTURE_2D, textureB0, 0);
+   FBO1 = gl.createFramebuffer();
+   gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+       gl.TEXTURE_2D, textureA1, 0);
+   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
+       gl.TEXTURE_2D, textureB1, 0);
+
+   if( gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE)
+     alert(err + "FLOAT as the color attachment to an FBO");
+
+   prog_show  = gl.createProgram();
+   gl.attachShader(prog_show, getShader( gl, "shader-vs" ));
+   gl.attachShader(prog_show, getShader( gl, "shader-fs-show" ));
+   gl.linkProgram(prog_show);
+   gl.useProgram(prog_show);
+   gl.uniform1i(gl.getUniformLocation(prog_show, "sampB"), 1);
+
+//draw(); return;
+
+   setInterval(fr, 500);
+   time = new Date().getTime();
+   anim();
+}
+function draw(){
+   gl.useProgram(prog);
+   for(var i = 0; i < it; i++){
+    gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.uniform1i(locA, 0);
+    gl.uniform1i(locB, 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.uniform1i(locA, 2);
+    gl.uniform1i(locB, 3);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+   }
+   gl.useProgram(prog_show);
+   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+   frames++;
+}
+function anim(){
+   draw();
+   switch ( animation ){
+     case "reset":
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, textureA0);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+        new Float32Array(pixA))
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, textureB0);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+        new Float32Array(pixB))
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, textureA1);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+        new Float32Array(pixA))
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, textureB1);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0,0, n,n, gl.RGBA, gl.FLOAT,
+        new Float32Array(pixB))
+      animation = "animate";
+     case "animate":
+       if (delay == 0) requestAnimationFrame(anim);
+       else setTimeout("requestAnimationFrame(anim)", delay);
+       break;
+     case "stop":
+       break;
+   }
+}
+function run(v) {
+  if( animation == "animate" ){
+    animation = "stop";
+    document.getElementById('runBtn').value = "Run ";}
+  else{
+    animation = "animate";
+    document.getElementById('runBtn').value = "Stop";
+    anim();
+  }
+}
+function reset() {
+  if( animation == "stop" ){
+    animation = "reset";
+    document.getElementById('runBtn').value = "Stop";
+    anim();}
+  else animation = "reset";
+}
+function fr(){
+  var ti = new Date().getTime();
+  var fps = Math.round(1000*frames/(ti - time));
+  document.getElementById("framerate").value = fps;
+  frames = 0;  time = ti;
+}
+function setDt(v) {
+  dt = parseFloat(v);
+  gl.useProgram(prog);
+  gl.uniform1f(gl.getUniformLocation(prog, "dt"), dt);
+  gl.uniform1f(gl.getUniformLocation(prog, "mdt"), mod*dt);
+  gl.uniform1f(gl.getUniformLocation(prog, "dth2"), D*dt/(4*h*h));
+}
+function setH(v) {
+  h = parseFloat(v);
+  gl.useProgram(prog);
+  gl.uniform1f(gl.getUniformLocation(prog, "dth2"), D*dt/(4*h*h));
+}
+function setM(v) {
+  mod = parseFloat(v);
+  gl.useProgram(prog);
+  gl.uniform1f(gl.getUniformLocation(prog, "mdt"), mod*dt);
+}
+</script>
+
+<style type="text/css">
+  H1{ font-size: 120%; color: green}
+</style>
+</head>
+<body onload="main()">
+
+<h1>MBR model (modified Beeler-Reuter).
+<br>2D spiral waves (WebGL 2)</h1>
+
+"the BR model (<i>mod = 1</i></sup>) produces breakup because it has a
+very long wave length and adapts to very short at high frequencies and
+leads to breakup via slow recovery fronts (the wave back is slow and the
+wave front is too fast and crashes on it). By speeding up the calcium
+dynamics by two (<i>mod = 2</i></sup>) we can decrease the wave length
+and avoid breakup." &nbsp; Flavio H. Fenton
+
+<br>mod<input size="2" value="2" onchange="setM(this.value)">
+
+<br><canvas id="c" width="512" height="512"></canvas>
+
+<br><button onclick="reset()">Reset</button>
+<input type="button" onclick="run()" value="Stop" size="1" id="runBtn">
+dt<input size="2" value="0.02" onchange="setDt(this.value)">ms
+dx<input size="2" value="0.03" onchange="setH(this.value)">cm
+&nbsp; it<input size="2" value="10" onchange="it=parseInt(this.value)">
+delay<input size="2" value="10" onchange="delay=parseInt(this.value)">
+fps<input size="2" id="framerate">
+
+<br>On 2D plane <i>Vm</i> values are displayed by the red color.
+<i>2 x</i> values are displayed by the green color.
+This script uses simple explicit algorithm and 512x512
+float32 textures with the CLAMP_TO_EDGE boundary conditions.
+It makes <i>2 it</i> time steps per frame.
+
+<p>Experimental WebGL 2.
+The script uses multiple rendering into 2 textures (8 variables) and is more
+clear and faster than <a href="MBRmodel2d.html">WebGL 1 based one</a>.
+
+<hr><a href="heart.html">Heart rhythms</a>
+&nbsp; &nbsp; <i>updated</i> 12 Mar 2016
+
+</body></html>S
