@@ -5,7 +5,7 @@
     <canvas width = "1370" height = "970" id = "my_Canvas"></canvas>
     <script src="gl-matrix-min.js"></script>
     <script>
-      var instanceNum = 100;  //The nubmer of balls to draw.
+      var instanceNum = 1000;  //The nubmer of balls to draw.
       var instancePiece = 128;  // Control the number of vertex of a ball.
       var vertCode =
         '#version 300 es\n' + 
@@ -359,7 +359,6 @@
           gl.useProgram(shaderProgram);
           gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
           gl.bindBuffer(gl.ARRAY_BUFFER, sphereVbuf);
-          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereV), gl.STATIC_DRAW);
           gl.enableVertexAttribArray(vertexPosLocation);
           gl.vertexAttribPointer(vertexPosLocation, 3, gl.FLOAT, false, 0, 0);
 

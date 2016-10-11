@@ -1,0 +1,689 @@
+<!doctype html>
+<html>
+  <label id = "fps">fps</label>
+  <body>
+    <canvas width = "1370" height = "970" id = "my_Canvas"></canvas>
+    <script src="gl-matrix-min.js"></script>
+    <script>
+      var instanceNum = 300;  //The nubmer of balls to draw.
+      var instancePiece = 128;  // Control the number of vertex of a ball.
+      var vertCode =
+        '#version 300 es\n' + 
+        //'uniform mat4 moveMatrix;\n' +
+        //'uniform mat4 originMatrix;\n' +
+        //'uniform vec3 center;\n' +
+        'in vec3 pos;\n' +
+        'in vec3 vNormal;\n' +
+        'in vec2 vTex;\n' +
+        'in vec3 offset;\n' +
+        'out vec2 vTexC;\n' +
+        'out vec3 normal;\n' +
+        'out vec3 vPos;\n' +
+        'uniform mat4 pMat;'+
+        'uniform mat4 mvMat;'+
+        'uniform mat3 uNormal;'+
+        'void main()\n' +
+        '{\n' +
+            'vTexC = vTex;\n' +
+            'normal = normalize(uNormal * vNormal);'+
+            'gl_Position = pMat * mvMat * vec4(pos + offset, 1.0);\n' +
+            'vPos = vec3 (pMat * mvMat * vec4(pos + offset, 1.0));\n' +
+           // 'gl_Position = originMatrix * moveMatrix * vec4(pos, 1.0) + vec4(center, 0.0);\n' +
+        '}\n';
+      // Fragment shader program
+      var fragCode1 =
+        '#version 300 es\n' +
+        'precision mediump float;\n' +
+        'in vec2 vTexC;\n' +
+        'in vec3 normal;\n' +
+        'in vec3 vPos;\n' +
+        
+        'uniform vec3 pLight1;\n' +
+        'uniform vec3 pLight2;\n' +
+        'uniform vec3 pointLight;\n' +
+        'uniform vec3 ambientLight;\n' +
+        'uniform sampler2D sampT;\n' +
+        'layout(location = 0) out vec4 color0;\n' +
+        'void main()\n' +
+        '{\n' +
+            'color0 = vec4(texture(sampT, vTexC).rgb * vec3(0.6, 0.4, 0.2) * dot(pLight1, normal), 1.0);\n' +    //parallel light 1
+        '}\n';
+      var fragCode2 =
+        '#version 300 es\n' +
+        'precision mediump float;\n' +
+        'in vec2 vTexC;\n' +
+        'in vec3 normal;\n' +
+        'in vec3 vPos;\n' +
+        
+        'uniform vec3 pLight1;\n' +
+        'uniform vec3 pLight2;\n' +
+        'uniform vec3 pointLight;\n' +
+        'uniform vec3 ambientLight;\n' +
+        'uniform sampler2D sampT;\n' +
+        'layout(location = 0) out vec4 color0;\n' +
+        'void main()\n' +
+        '{\n' +
+            'color0 = vec4(texture(sampT, vTexC).rgb * vec3(0.3, 0.2, 0.7) * dot(pLight2, normal), 1.0) ;\n' +    //parallel light 2                    
+        '}\n';
+      var fragCode3 =
+        '#version 300 es\n' +
+        'precision mediump float;\n' +
+        'in vec2 vTexC;\n' +
+        'in vec3 normal;\n' +
+        'in vec3 vPos;\n' +
+        
+        'uniform vec3 pLight1;\n' +
+        'uniform vec3 pLight2;\n' +
+        'uniform vec3 pointLight;\n' +
+        'uniform vec3 ambientLight;\n' +
+        'uniform sampler2D sampT;\n' +
+        'layout(location = 0) out vec4 color0;\n' +
+        'void main()\n' +
+        '{\n' +
+            'color0 = vec4(texture(sampT, vTexC).rgb * vec3(1.0, 1.0, 1.0) * dot(normalize(vPos - pointLight), normal), 1.0);\n' +                             // dot light
+        '}\n';
+      var fragCode4 =
+        '#version 300 es\n' +
+        'precision mediump float;\n' +
+        'in vec2 vTexC;\n' +
+        'in vec3 normal;\n' +
+        'in vec3 vPos;\n' +
+        
+        'uniform vec3 pLight1;\n' +
+        'uniform vec3 pLight2;\n' +
+        'uniform vec3 pointLight;\n' +
+        'uniform vec3 ambientLight;\n' +
+        'uniform sampler2D sampT;\n' +
+        'layout(location = 0) out vec4 color0;\n' +
+        'void main()\n' +
+        '{\n' +
+            'color0 = vec4(texture(sampT, vTexC).rgb * ambientLight, 1.0) + vec4(normal, 1.0) * 0.00000001;\n' +                             //ambient light
+        '}\n';
+      var vertCodeShow =
+        '#version 300 es\n' + 
+        'precision mediump float;\n' +
+        //'uniform mat4 moveMatrix;\n' +
+        //'uniform mat4 originMatrix;\n' +
+        //'uniform vec3 center;\n' +
+        'in vec3 pos;\n' +
+        'in vec2 vTC;\n' +
+        'out vec2 vertexCoords;\n' +
+        'void main()\n' +
+        '{\n' +
+            'vertexCoords = vTC;\n' +
+            'gl_Position = vec4(pos, 1.0);\n' +
+           // 'gl_Position = originMatrix * moveMatrix * vec4(pos, 1.0) + vec4(center, 0.0);\n' +
+        '}\n';
+        var fragCodeShow =
+        '#version 300 es\n' +
+        'precision mediump float;\n' +
+        'uniform sampler2D sampA;\n' +
+        'uniform sampler2D sampB;\n' +
+        'uniform sampler2D sampC;\n' +
+        'uniform sampler2D sampD;\n' +
+        'in vec2 vertexCoords;\n' +
+        'out vec4 FragColor;\n' +
+
+        'void main()\n' +
+        '{\n' +
+            'FragColor = texture(sampA, vertexCoords) + texture(sampC, vertexCoords) + texture(sampB, vertexCoords) + texture(sampD, vertexCoords);\n' +
+        '}\n';
+
+        function generateSphere(vertices, normals, texcoords, radius, detail) {
+        // Based on Paul Bourke's geometry article
+
+          var TWOPI = 6.28318530717958;
+          var PIDIV2 = 1.57079632679489;
+
+          var p = detail;
+          var r = radius;
+          var cx = 0;
+          var cy = 0;
+          var cz = 0;
+
+          for( var i = 0; i < p/2; ++i )
+          {
+
+            var theta1 = i * TWOPI / p - PIDIV2;
+            var theta2 = (i + 1) * TWOPI / p - PIDIV2;
+
+            for(var j = 0; j <= p; ++j )
+            {
+              var theta3 = j * TWOPI / p;
+
+              var ex = Math.cos(theta2) * Math.cos(theta3);
+              var ey = Math.sin(theta2);
+              var ez = Math.cos(theta2) * Math.sin(theta3);
+              var px = cx + r * ex;
+              var py = cy + r * ey;
+              var pz = cz + r * ez;
+              var tu  = -(j/p);
+              var tv  = 2*(i+1)/p;
+
+              vertices.push(px, py, pz);
+              normals.push(ex, ey, ez);
+              texcoords.push(tu, -tv);
+
+              ex = Math.cos(theta1) * Math.cos(theta3);
+              ey = Math.sin(theta1);
+              ez = Math.cos(theta1) * Math.sin(theta3);
+              px = cx + r * ex;
+              py = cy + r * ey;
+              pz = cz + r * ez;
+              tu  = -(j/p);
+              tv  = 2*i/p;
+
+              vertices.push(px, py, pz);
+              normals.push(ex, ey, ez);
+              texcoords.push(tu, -tv);
+          }
+        }
+      }
+      var canvas = document.getElementById('my_Canvas');
+      gl = canvas.getContext('webgl2');
+      var vertShader = gl.createShader(gl.VERTEX_SHADER);
+      // Attach vertex shader source code
+      gl.shaderSource(vertShader, vertCode);
+      // Compile the vertex shader
+      gl.compileShader(vertShader);
+      var fragShader1 = gl.createShader(gl.FRAGMENT_SHADER);
+      // Attach fragment shader source code
+      gl.shaderSource(fragShader1, fragCode1);
+      // Compile the fragmentt shader
+      gl.compileShader(fragShader1);
+      var fragShader2 = gl.createShader(gl.FRAGMENT_SHADER);
+      // Attach fragment shader source code
+      gl.shaderSource(fragShader2, fragCode2);
+      // Compile the fragmentt shader
+      gl.compileShader(fragShader2);
+      var fragShader3 = gl.createShader(gl.FRAGMENT_SHADER);
+      // Attach fragment shader source code
+      gl.shaderSource(fragShader3, fragCode3);
+      // Compile the fragmentt shader
+      gl.compileShader(fragShader3);
+
+      var fragShader4 = gl.createShader(gl.FRAGMENT_SHADER);
+      // Attach fragment shader source code
+      gl.shaderSource(fragShader4, fragCode4);
+      // Compile the fragmentt shader
+      gl.compileShader(fragShader4);
+
+      // Create a shader program object to store
+      // the combined shader program
+      var shaderProgram1 = gl.createProgram();
+      // Attach a vertex shader
+      gl.attachShader(shaderProgram1, vertShader);
+      // Attach a fragment shader
+      gl.attachShader(shaderProgram1, fragShader1);
+      // Link both the programs
+      gl.linkProgram(shaderProgram1);
+      // Use the combined shader program object
+      gl.useProgram(shaderProgram1);
+      var shaderProgram2 = gl.createProgram();
+      // Attach a vertex shader
+      gl.attachShader(shaderProgram2, vertShader);
+      // Attach a fragment shader
+      gl.attachShader(shaderProgram2, fragShader2);
+      // Link both the programs
+      gl.linkProgram(shaderProgram2);
+      // Use the combined shader program object
+      gl.useProgram(shaderProgram2);
+      var shaderProgram3 = gl.createProgram();
+      // Attach a vertex shader
+      gl.attachShader(shaderProgram3, vertShader);
+      // Attach a fragment shader
+      gl.attachShader(shaderProgram3, fragShader3);
+      // Link both the programs
+      gl.linkProgram(shaderProgram3);
+      // Use the combined shader program object
+      gl.useProgram(shaderProgram3);
+      var shaderProgram4 = gl.createProgram();
+      // Attach a vertex shader
+      gl.attachShader(shaderProgram4, vertShader);
+      // Attach a fragment shader
+      gl.attachShader(shaderProgram4, fragShader4);
+      // Link both the programs
+      gl.linkProgram(shaderProgram4);
+      // Use the combined shader program object
+      gl.useProgram(shaderProgram4);
+
+      gl.useProgram(shaderProgram1);
+      
+      var colorTex = loadTexture("plutomap1k.jpg");
+      
+      function loadTexture(src) {
+      
+        var image = new Image();
+        var texture = gl.createTexture();
+        image.src = src;
+        image.onload = function() {handleTextureLoaded(image, texture); };
+        return texture;
+      }
+
+      function handleTextureLoaded(image, texture) {
+
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.activeTexture(gl.TEXTURE0);
+        var texture0 = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture0);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1370, 970, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+        gl.activeTexture(gl.TEXTURE1);
+        var texture1 = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture1);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1370, 970, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+
+        gl.activeTexture(gl.TEXTURE2);
+        var texture2 = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture2);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1370, 970, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+
+        gl.activeTexture(gl.TEXTURE3);
+        var texture3 = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture3);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1370, 970, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+        gl.viewport(0, 0, 1370, 970);
+
+        FBO1 = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture0, 0);
+        depthBuffer1 = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer1); // Bind the object to target
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1370, 970);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer1);
+
+        FBO2 = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO2);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture1, 0);
+        depthBuffer2 = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer2); // Bind the object to target
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1370, 970);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer2);
+        
+        FBO3 = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO3);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture2, 0);
+        depthBuffer3 = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer3); // Bind the object to target
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1370, 970);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer3);
+        
+        FBO4 = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO4);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture3, 0);
+        depthBuffer4 = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer4); // Bind the object to target
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1370, 970);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer4);
+        
+
+
+
+
+        var sphereV = [];
+        var sphereC = [];
+        var sphereN = [];
+        var instanceOffset = [];
+        var mvMat = mat4.create();
+        var pMat = mat4.create();
+        var uNormalMat = mat3.create();
+        mat4.identity(mvMat);
+
+        mat4.perspective(pMat, 90.0 * Math.PI / 180.0, 1370/970 , 1 , 1024);
+        mat4.rotate(mvMat, mvMat, 0, [0, 0, 1]);
+        mat4.translate(mvMat, mvMat, [0, 0, -3]);
+
+        mat3.fromMat4(uNormalMat, mvMat);
+        mat3.invert(uNormalMat, uNormalMat);
+        mat3.transpose(uNormalMat, uNormalMat);
+        
+
+        generateSphere(sphereV, sphereN, sphereC, 5.0 / Math.sqrt(instanceNum), instancePiece);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.viewport(0, 0, 1370, 970);
+
+        var pLight1V = [1.0, 0.0, 0.0];
+        var pLight2V = [0.0, 1.0, 0.0];
+        var pointLightV = [-0.3, -0.4, -0.5]; 
+        var ambientLightV = [0.1, 0.1, 0.1];
+
+        for(var ii = 0; ii < instanceNum; ++ii){
+          instanceOffset.push(Math.random() * 8 - 4, Math.random() * 8 - 2, Math.random() * 16 - 15);
+        }
+        
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        var sphereVbuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereVbuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereV), gl.STATIC_DRAW);
+        var vertexPosLocation1 = gl.getAttribLocation(shaderProgram1, "pos");
+        gl.enableVertexAttribArray(vertexPosLocation1);
+        gl.vertexAttribPointer(vertexPosLocation1, 3, gl.FLOAT, false, 0, 0);
+        var vertexPosLocation2 = gl.getAttribLocation(shaderProgram2, "pos");
+        gl.enableVertexAttribArray(vertexPosLocation2);
+        gl.vertexAttribPointer(vertexPosLocation2, 3, gl.FLOAT, false, 0, 0);
+        var vertexPosLocation3 = gl.getAttribLocation(shaderProgram3, "pos");
+        gl.enableVertexAttribArray(vertexPosLocation3);
+        gl.vertexAttribPointer(vertexPosLocation3, 3, gl.FLOAT, false, 0, 0);
+        var vertexPosLocation4 = gl.getAttribLocation(shaderProgram4, "pos");
+        gl.enableVertexAttribArray(vertexPosLocation4);
+        gl.vertexAttribPointer(vertexPosLocation4, 3, gl.FLOAT, false, 0, 0);
+
+        var sphereCbuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereCbuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereC), gl.STATIC_DRAW);
+
+        var colors1 = gl.getAttribLocation(shaderProgram1, "vTex");
+        gl.enableVertexAttribArray(colors1);
+        gl.vertexAttribPointer(colors1, 2, gl.FLOAT, false, 0, 0);
+        var colors2 = gl.getAttribLocation(shaderProgram2, "vTex");
+        gl.enableVertexAttribArray(colors2);
+        gl.vertexAttribPointer(colors2, 2, gl.FLOAT, false, 0, 0);
+        var colors3 = gl.getAttribLocation(shaderProgram3, "vTex");
+        gl.enableVertexAttribArray(colors3);
+        gl.vertexAttribPointer(colors3, 2, gl.FLOAT, false, 0, 0);
+        var colors4 = gl.getAttribLocation(shaderProgram4, "vTex");
+        gl.enableVertexAttribArray(colors4);
+        gl.vertexAttribPointer(colors4, 2, gl.FLOAT, false, 0, 0);
+
+        var sphereNbuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereNbuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereN), gl.STATIC_DRAW);
+        var norm1 = gl.getAttribLocation(shaderProgram1, "vNormal");
+        gl.enableVertexAttribArray(norm1);
+        gl.vertexAttribPointer(norm1, 3, gl.FLOAT, false, 0, 0);
+        var norm2 = gl.getAttribLocation(shaderProgram2, "vNormal");
+        gl.enableVertexAttribArray(norm2);
+        gl.vertexAttribPointer(norm2, 3, gl.FLOAT, false, 0, 0);
+        var norm3 = gl.getAttribLocation(shaderProgram3, "vNormal");
+        gl.enableVertexAttribArray(norm3);
+        gl.vertexAttribPointer(norm3, 3, gl.FLOAT, false, 0, 0);
+        var norm4 = gl.getAttribLocation(shaderProgram4, "vNormal");
+        gl.enableVertexAttribArray(norm4);
+        gl.vertexAttribPointer(norm4, 3, gl.FLOAT, false, 0, 0);
+        
+        var offsetBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(instanceOffset), gl.STATIC_DRAW);
+        var offset1 = gl.getAttribLocation(shaderProgram1, "offset");
+        gl.enableVertexAttribArray(offset1);
+        gl.vertexAttribPointer(offset1, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(offset1, 1);
+        var offset2 = gl.getAttribLocation(shaderProgram2, "offset");
+        gl.enableVertexAttribArray(offset2);
+        gl.vertexAttribPointer(offset2, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(offset2, 1);
+        var offset3 = gl.getAttribLocation(shaderProgram3, "offset");
+        gl.enableVertexAttribArray(offset3);
+        gl.vertexAttribPointer(offset3, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(offset3, 1);
+        var offset4 = gl.getAttribLocation(shaderProgram4, "offset");
+        gl.enableVertexAttribArray(offset4);
+        gl.vertexAttribPointer(offset4, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(offset4, 1);
+        gl.useProgram(shaderProgram1);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram1, "sampT"), 4);
+        var pMatPos1 = gl.getUniformLocation(shaderProgram1, "pMat");
+        var mvMatPos1 = gl.getUniformLocation(shaderProgram1, "mvMat");
+        var uNormalMatPos1 = gl.getUniformLocation(shaderProgram1, "uNormal");
+        var pLight11 = gl.getUniformLocation(shaderProgram1, "pLight1");
+        //var pLight21 = gl.getUniformLocation(shaderProgram1, "pLight2");
+        //var pointLight1 = gl.getUniformLocation(shaderProgram1, "pointLight");
+        //var ambientLight1 = gl.getUniformLocation(shaderProgram1, "ambientLight");
+        gl.useProgram(shaderProgram2);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram2, "sampT"), 4);
+        var pMatPos2 = gl.getUniformLocation(shaderProgram2, "pMat");
+        var mvMatPos2 = gl.getUniformLocation(shaderProgram2, "mvMat");
+        var uNormalMatPos2 = gl.getUniformLocation(shaderProgram2, "uNormal");
+        //var pLight12 = gl.getUniformLocation(shaderProgram2, "pLight1");
+        var pLight22 = gl.getUniformLocation(shaderProgram2, "pLight2");
+        //var pointLight2 = gl.getUniformLocation(shaderProgram2, "pointLight");
+        //var ambientLight2 = gl.getUniformLocation(shaderProgram2, "ambientLight");
+        gl.useProgram(shaderProgram3);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram3, "sampT"), 4);
+        var pMatPos3 = gl.getUniformLocation(shaderProgram3, "pMat");
+        var mvMatPos3 = gl.getUniformLocation(shaderProgram3, "mvMat");
+        var uNormalMatPos3 = gl.getUniformLocation(shaderProgram3, "uNormal");
+        //var pLight13 = gl.getUniformLocation(shaderProgram3, "pLight1");
+        //var pLight23 = gl.getUniformLocation(shaderProgram3, "pLight2");
+        var pointLight3 = gl.getUniformLocation(shaderProgram3, "pointLight");
+        //var ambientLight3 = gl.getUniformLocation(shaderProgram3, "ambientLight");
+        gl.useProgram(shaderProgram4);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram4, "sampT"), 4);
+        var pMatPos4 = gl.getUniformLocation(shaderProgram4, "pMat");
+        var mvMatPos4 = gl.getUniformLocation(shaderProgram4, "mvMat");
+        var uNormalMatPos4 = gl.getUniformLocation(shaderProgram4, "uNormal");
+        //var pLight14 = gl.getUniformLocation(shaderProgram4, "pLight1");
+        //var pLight24 = gl.getUniformLocation(shaderProgram4, "pLight2");
+        //var pointLight4 = gl.getUniformLocation(shaderProgram4, "pointLight");
+        var ambientLight4 = gl.getUniformLocation(shaderProgram4, "ambientLight");
+
+        gl.useProgram(shaderProgram1);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+        
+        //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, sphereV.length / 3);
+
+        gl.useProgram(shaderProgram2);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO2);
+   
+        //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, sphereV.length / 3);
+
+        gl.useProgram(shaderProgram3);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO3);
+        
+        //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, sphereV.length / 3);
+
+        gl.useProgram(shaderProgram4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, FBO4);
+        
+        //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, sphereV.length / 3);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        var vertShaderShow = gl.createShader(gl.VERTEX_SHADER);
+        // Attach vertex shader source code
+        gl.shaderSource(vertShaderShow, vertCodeShow);
+        // Compile the vertex shader
+        gl.compileShader(vertShaderShow);
+        var fragShaderShow = gl.createShader(gl.FRAGMENT_SHADER);
+        // Attach fragment shader source code
+        gl.shaderSource(fragShaderShow, fragCodeShow);
+        // Compile the fragmentt shader
+        gl.compileShader(fragShaderShow);
+        // Create a shader program object to store
+        // the combined shader program
+        var shaderProgramShow = gl.createProgram();
+        // Attach a vertex shader
+        gl.attachShader(shaderProgramShow, vertShaderShow);
+        // Attach a fragment shader
+        gl.attachShader(shaderProgramShow, fragShaderShow);
+        // Link both the programs
+        gl.linkProgram(shaderProgramShow);
+        // Use the combined shader program object
+        gl.useProgram(shaderProgramShow);
+
+        var vertices = new Float32Array([
+          -1.0, 1.0, 0.0,  1.0, 1.0, 0.0,  -1.0,-1.0, 0.0,   1.0,-1.0, 0.0, 
+        ]);
+        var texCoords = new Float32Array([0.0, 1.0,   1.0, 1.0,   0.0, 0.0,   1.0, 0.0]);
+        var planeBuffer = gl.createBuffer();
+        var vertexPosLocation2 = gl.getAttribLocation(shaderProgramShow, "pos");
+        gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(vertexPosLocation2);
+        gl.vertexAttribPointer(vertexPosLocation2, 3, gl.FLOAT, false, 0, 0);
+
+        var texBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
+        var vTC = gl.getAttribLocation(shaderProgramShow, "vTC");
+        gl.enableVertexAttribArray(vTC);
+        gl.vertexAttribPointer(vTC, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1i(gl.getUniformLocation(shaderProgramShow, "sampA"), 0);
+        gl.uniform1i(gl.getUniformLocation(shaderProgramShow, "sampB"), 1);
+        gl.uniform1i(gl.getUniformLocation(shaderProgramShow, "sampC"), 2);
+        gl.uniform1i(gl.getUniformLocation(shaderProgramShow, "sampD"), 3);
+        var angle = 0.0;
+        // Check if anisotropic filtering is supported and enable it
+        var draw = function(){
+          angle = angle + 0.8;
+          if (angle >= 360) angle = 0.0;
+          pLight1V = [Math.sin(angle * Math.PI / 180), Math.cos(angle * Math.PI / 180), 0.0];
+          pLight2V = [0.6 * Math.sin(angle * Math.PI / 180), 0.8 , 0.6 * Math.cos(angle * Math.PI / 180) ];
+          pointLightV = [-0.3, -4.0 * Math.sin(angle * 2 * Math.PI / 180), -4.0 * Math.cos(angle * Math.PI / 180)]
+          
+          
+////////////////////////////////////////////////////////////////////////////////
+          gl.bindBuffer(gl.ARRAY_BUFFER, sphereVbuf);
+          gl.enableVertexAttribArray(vertexPosLocation1);
+          gl.vertexAttribPointer(vertexPosLocation1, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(vertexPosLocation2);
+          gl.vertexAttribPointer(vertexPosLocation2, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(vertexPosLocation3);
+          gl.vertexAttribPointer(vertexPosLocation3, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(vertexPosLocation4);
+          gl.vertexAttribPointer(vertexPosLocation4, 3, gl.FLOAT, false, 0, 0);
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, sphereCbuf);
+          gl.enableVertexAttribArray(colors1);
+          gl.vertexAttribPointer(colors1, 2, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(colors2);
+          gl.vertexAttribPointer(colors2, 2, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(colors3);
+          gl.vertexAttribPointer(colors3, 2, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(colors4);
+          gl.vertexAttribPointer(colors4, 2, gl.FLOAT, false, 0, 0);
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, sphereNbuf);
+          gl.enableVertexAttribArray(norm1);
+          gl.vertexAttribPointer(norm1, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(norm2);
+          gl.vertexAttribPointer(norm2, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(norm3);
+          gl.vertexAttribPointer(norm3, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(norm4);
+          gl.vertexAttribPointer(norm4, 3, gl.FLOAT, false, 0, 0);
+          
+          gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuf);
+          gl.enableVertexAttribArray(offset1);
+          gl.vertexAttribPointer(offset1, 3, gl.FLOAT, false, 0, 0);
+          gl.vertexAttribDivisor(offset1, 1);
+          gl.enableVertexAttribArray(offset2);
+          gl.vertexAttribPointer(offset2, 3, gl.FLOAT, false, 0, 0);
+          gl.vertexAttribDivisor(offset2, 1);
+          gl.enableVertexAttribArray(offset3);
+          gl.vertexAttribPointer(offset3, 3, gl.FLOAT, false, 0, 0);
+          gl.vertexAttribDivisor(offset3, 1);
+          gl.enableVertexAttribArray(offset4);
+          gl.vertexAttribPointer(offset4, 3, gl.FLOAT, false, 0, 0);
+          gl.vertexAttribDivisor(offset4, 1);
+
+          
+          
+
+          gl.useProgram(shaderProgram1);
+          gl.uniformMatrix4fv(pMatPos1, false, pMat);
+          gl.uniformMatrix4fv(mvMatPos1, false, mvMat);
+          gl.uniformMatrix3fv(uNormalMatPos1, false, uNormalMat);
+          gl.uniform3f(pLight11, pLight1V[0], pLight1V[1], pLight1V[2]);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, FBO1);
+        
+          //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, sphereV.length / 3, instanceNum);
+
+          gl.useProgram(shaderProgram2);
+          gl.uniformMatrix4fv(pMatPos2, false, pMat);
+          gl.uniformMatrix4fv(mvMatPos2, false, mvMat);
+          gl.uniformMatrix3fv(uNormalMatPos2, false, uNormalMat);
+          gl.uniform3f(pLight22, pLight2V[0], pLight2V[1], pLight2V[2]);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, FBO2);
+   
+          //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, sphereV.length / 3, instanceNum);
+
+          gl.useProgram(shaderProgram3);
+          gl.uniformMatrix4fv(pMatPos3, false, pMat);
+          gl.uniformMatrix4fv(mvMatPos3, false, mvMat);
+          gl.uniformMatrix3fv(uNormalMatPos3, false, uNormalMat);
+          gl.uniform3f(pointLight3, pointLightV[0], pointLightV[1], pointLightV[2]);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, FBO3);
+        
+          //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, sphereV.length / 3, instanceNum);
+
+          gl.useProgram(shaderProgram4);
+          gl.uniformMatrix4fv(pMatPos4, false, pMat);
+          gl.uniformMatrix4fv(mvMatPos4, false, mvMat);
+          gl.uniformMatrix3fv(uNormalMatPos4, false, uNormalMat);
+          gl.uniform3f(ambientLight4, ambientLightV[0], ambientLightV[1], ambientLightV[2]);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, FBO4);
+        
+          //gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2, gl.COLOR_ATTACHMENT3]);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, sphereV.length / 3, instanceNum);
+
+          gl.useProgram(shaderProgramShow);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.useProgram(shaderProgramShow);
+          gl.bindBuffer(gl.ARRAY_BUFFER, texBuf);
+          gl.enableVertexAttribArray(vTC);
+          gl.vertexAttribPointer(vTC, 2, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer);
+          
+          gl.enableVertexAttribArray(vertexPosLocation2);
+          gl.vertexAttribPointer(vertexPosLocation2, 3, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+
+
+
+        }
+        var fps = 0;
+        var formatIndex = 0;
+        var tick = function() {
+          draw();   
+          fps = fps + 1;
+          requestAnimationFrame(tick, canvas);
+        };
+        tick();
+        var fpsOut = document.getElementById('fps');
+
+        setInterval(function(){
+                                fpsOut.innerHTML = fps.toFixed(1) + " fps";
+                                fps = 0;
+                              }
+                    ,1000);
+
+
+        
+
+      }
+    </script>
+  </body>
+</html>
