@@ -148,24 +148,66 @@
       var u_Sampler = gl.getUniformLocation(shaderProgram, 'u_Sampler');
       var tex = gl.createTexture();
       gl.activeTexture(gl.TEXTURE0);
+
+
+      
+      var largeImage = document.createElement('img');
+      largeImage.src = "testImage.png";
+
       var largeCanvas = document.createElement("canvas");
       largeCanvas.width = largeCanvasSize;
       largeCanvas.height = largeCanvasSize;
       var largeCanvasCtx = largeCanvas.getContext("2d");
-      var draw = function(internalFormat, format, type){
+
+      //var largeImageData = largeCanvasCtx.getImageData(0, 0, largeCanvasSize, largeCanvasSize); // <<------strange behavior--||
+      //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+      //strange behavior: when you use getimagedata and even do nothing, the performance gets down (60fps --> 25fps for canvas + R8 format).
+      //First I think it is because getImageData takes too much memory, but then I add the following code:
+      /*+ var largeCanvas2 = document.createElement("canvas");
+        + largeCanvas2.width = largeCanvasSize;
+        + largeCanvas2.height = largeCanvasSize;
+        + var largeCanvas2Ctx = largeCanvas2.getContext("2d");
+        + largeCanvas2Ctx.fillStyle = "rgb(" + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + ")";
+        + largeCanvas2Ctx.fillRect(0,0,largeCanvasSize,largeCanvasSize);
+        + var largeImageData = largeCanvas2Ctx.getImageData(0, 0, largeCanvasSize, largeCanvasSize);
+        - var largeImageData = largeCanvasCtx.getImageData(0, 0, largeCanvasSize, largeCanvasSize);*/
+      //Now the original performance comes back. So it's not the memory problem.
+      //Does getImageData really changes the GPU data? It is not supposed to do so. Check with Qiankun on Monday.
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        
+
+      var objList = [];
+      var objName = [];
+      objList.push(largeCanvas, largeImage);
+      objName.push('canvas', 'image');
+
+
+
+      var draw = function(internalFormat, format, type, objSrc){
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-        largeCanvasCtx.fillStyle = "rgb(" + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + ")";
-        largeCanvasCtx.fillRect(0,0,largeCanvasSize,largeCanvasSize);
+        if(objSrc == largeCanvas){
+          largeCanvasCtx.fillStyle = "rgb(" + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + ")";
+          largeCanvasCtx.fillRect(0,0,largeCanvasSize,largeCanvasSize);
+        }
+        /*if(objSrc == largeImageData){
+          largeCanvasCtx.fillStyle = "rgb(" + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + "," + Math.round(Math.random() * 255) + ")";
+          largeCanvasCtx.fillRect(0,0,largeCanvasSize,largeCanvasSize);
+          objList[2] = largeCanvasCtx.getImageData(0, 0, largeCanvasSize, largeCanvasSize);	
+
+        }*/
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, format, type, largeCanvas);
+        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, format, type, objSrc);
         gl.uniform1i(u_Sampler, 0);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
       var fps = 0;
       var formatIndex = 0;
+      var objIndex = 0;
       var tick = function() {
-        draw(internalFormatArray[formatIndex], formatArray[formatIndex], typeArray[formatIndex]);   
+        draw(internalFormatArray[formatIndex], formatArray[formatIndex], typeArray[formatIndex], objList[objIndex]);   
         fps = fps + 1;
         requestAnimationFrame(tick, canvas);
       };
@@ -173,7 +215,7 @@
     var fpsOut = document.getElementById('fps');
     var formatOut = document.getElementById('format');
     var seconds = 0;
-    formatOut.innerHTML = internalFormatName[formatIndex];
+    formatOut.innerHTML = objName[objIndex] + ' + ' + internalFormatName[formatIndex];
     setInterval(function(){
                             fpsOut.innerHTML = fps.toFixed(1) + " fps";
                             fps = 0;
@@ -181,7 +223,8 @@
                             if(seconds == 5){
                             	seconds = 0;
                             	formatIndex = (formatIndex + 1) % internalFormatName.length
-                            	formatOut.innerHTML = internalFormatName[formatIndex];
+                            	if(formatIndex == 0) objIndex = (objIndex + 1) % objList.length
+                            	formatOut.innerHTML = objName[objIndex] + ' + ' + internalFormatName[formatIndex];
                             }
                           }
                 ,1000);
