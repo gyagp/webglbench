@@ -162,7 +162,7 @@
       //var largeImageData = largeCanvasCtx.getImageData(0, 0, largeCanvasSize, largeCanvasSize); // <<------strange behavior--||
       //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-      //strange behavior: when you use getimagedata and even do nothing, the performance gets down (60fps --> 25fps for canvas + R8 format).
+      //strange behavior: when you use getimagedata and even do nothing, the performance gets down (60fps --> 25fps for canvas + R8 format). To re-emerge the problem, just enable the above code.
       //First I think it is because getImageData takes too much memory, but then I add the following code:
       /*+ var largeCanvas2 = document.createElement("canvas");
         + largeCanvas2.width = largeCanvasSize;
